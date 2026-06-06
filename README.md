@@ -91,6 +91,24 @@ pip install -r requirements.txt
 python main.py 
 
 ```
+## ✅ Post-Unlock Success: Complete Control via Scrcpy
+
+Once **Smart Screen Unlocker Recovery** successfully injects the kernel gestures and bypasses the secure BFU/AFU lockscreen state, your Android device is now fully unlocked and responsive to external display utilities. 
+
+You can immediately transition to [scrcpy](https://github.com/genymobile/scrcpy) to achieve full low-latency screen mirroring, audio forwarding, and peripheral control to safely back up your system data.
+
+### 🚀 Quick Execution Guide:
+
+1. Keep your device connected via the authorized USB/Wireless ADB interface.
+2. Download and extract the latest version of `scrcpy` onto your host machine.
+3. Execute the following terminal commands depending on your recovery workflow:
+
+```bash
+# Standard high-performance mirroring with the physical device screen off
+scrcpy --always-on-top --turn-screen-off --stay-awake
+
+# Advanced forensic stream optimized for backup operations
+scrcpy --max-fps=30 --video-bit-rate=4M --audio-bit-rate=128k --window-title="Recovered Device Screen"
 
 ---
 
