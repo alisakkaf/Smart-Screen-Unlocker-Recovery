@@ -10,9 +10,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](https://opensource.org/licenses/MIT)
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-brightgreen.svg?style=for-the-badge)]()
 
-[![Downloads](https://badgen.net/github/assets-dl/alisakkaf/Smart-Screen-Unlocker-Recovery?icon=github&color=green&label=Downloads)](https://github.com/alisakkaf/Smart-Screen-Unlocker-Recovery/releases)
-[![Stars](https://badgen.net/github/stars/alisakkaf/Smart-Screen-Unlocker-Recovery?icon=github&color=yellow&label=Stars)](https://github.com/alisakkaf/Smart-Screen-Unlocker-Recovery/stargazers)
-[![Issues](https://badgen.net/github/open-issues/alisakkaf/Smart-Screen-Unlocker-Recovery?icon=github&color=indigo&label=Issues)](https://github.com/alisakkaf/Smart-Screen-Unlocker-Recovery/issues)
 
 **Smart Screen Unlocker Recovery** is an advanced, automation-driven forensic and accessibility framework. It is specifically engineered to help mobile technicians, forensic experts, and everyday users recover access to Android devices with **completely broken displays, dead touch digitizers, or inaccessible screens**. 
 
