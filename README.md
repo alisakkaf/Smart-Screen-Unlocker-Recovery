@@ -3,7 +3,7 @@
 <img src="https://github.com/alisakkaf/Smart-Screen-Unlocker-Recovery/blob/main/icon.png?raw=true" alt="Smart Screen Unlocker Logo" width="150"/> 
 
 
-# 🔓 Smart Screen Unlocker Recovery v1.0
+# 🔓 Smart Screen Unlocker Recovery v1.1
 
 [![Python Version](https://img.shields.io/badge/Python-3.8+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg?style=for-the-badge&logo=windows&logoColor=black)]()
@@ -11,31 +11,59 @@
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-brightgreen.svg?style=for-the-badge)]()
 
 
-**Smart Screen Unlocker Recovery** is an advanced, automation-driven forensic and accessibility framework. It is specifically engineered to help mobile technicians, forensic experts, and everyday users recover access to Android devices with **completely broken displays, dead touch digitizers, or inaccessible screens**. 
+**Smart Screen Unlocker Recovery** is an advanced, automation-driven forensic and accessibility framework. It is specifically engineered to help mobile technicians, forensic experts, and everyday users recover access to Android devices with **completely broken displays, dead touch digitizers, or inaccessible screens** locked by **Pattern, PIN, or Password** credentials. 
 
-By injecting raw kernel-level touch gestures via an authorized ADB (Android Debug Bridge) interface, this tool acts as a synthetic hardware digitizer, allowing you to input your known pattern and recover your data.
+By injecting raw kernel-level touch gestures or executing automated secure credential actions via an authorized ADB (Android Debug Bridge) interface, this tool acts as a synthetic hardware digitizer or secure bypass client, allowing you to bypass your lock screen and recover your data.
 
 </div>
 
-> **⚠️ CRITICAL NOTICE:** This is **NOT** a cracking, brute-forcing, or bypassing tool. It requires the device to have USB Debugging enabled, an authorized RSA fingerprint with the host PC, and the user MUST know the correct lock screen pattern.
+> **⚠️ CRITICAL NOTICE:** This is **NOT** a cracking, brute-forcing, or bypassing tool. It requires the device to have USB Debugging enabled, an authorized RSA fingerprint with the host PC, and the user MUST know the correct lock screen pattern, PIN, or password.
 
 ---
 
 ## 🔥 Unrivaled Features & Capabilities
 
+* **🔑 Multi-Credential Support (Pattern, PIN, Password):** Fully expanded GUI interface offering dedicated recovery options for patterns (interactive drawer), numeric PINs, and alphanumeric passwords.
+* **🌐 Unicode & Layout Safety:** Restricts simulated screen typing for Unicode (non-ASCII) passwords (such as Arabic or Chinese) to prevent keystroke drop errors caused by layout mismatches, cleanly offering OS-level clearing (`Clear Lock`) instead.
 * **🛡️ Multi-State Awareness (AFU/BFU):** Dynamically detects if the device is in *Before First Unlock (BFU)* or *After First Unlock (AFU)* states and adjusts the vertical matrix geometry accordingly.
 * **📐 Smart XML Container Bypassing:** Intelligently ignores fake, full-screen transparent containers deployed by modern security patches (e.g., Samsung OneUI 8+) to locate the true lock screen grid.
 * **🎨 Interactive Visual GUI:** Features a sleek, terminal-spawned graphical canvas allowing the technician to visually draw the pattern using a mouse, mirroring physical device interaction.
-* **⏱️ Auto-Timeout Prevention:** Automatically boosts the device's `screen_off_timeout` to 5 minutes during the operation to prevent screen sleep, seamlessly restoring the original settings post-injection.
+* **⏱️ Auto-Timeout Prevention:** Automatically boosts the device's `screen_off_timeout` during the operation to prevent screen sleep, seamlessly restoring the original settings post-injection.
+* **💻 Dynamic CLI Portrait Scaling (745x900):** Automatically sizes the terminal window at launch with a fallback ladder (`93x56` -> `93x48` -> `85x45`) to adapt safely to various screen resolutions and DPI scaling without shell errors.
+* **🔁 Persistent Main Loop:** The script stays alive after each operation, prompting the technician to return to the main menu without restarting the program.
 * **✅ Deep Kernel Verification:** Interrogates the Android OS (`dumpsys window` & `dumpsys keyguard`) to mathematically verify a successful unlock without relying on visual screen feedback.
 
 ---
 ## 📸 Interface & Execution Preview
 
+### 🆕 v1.1 PIN & Password Interface
+| 📱 Select Recovery Method | 🔢 PIN & Password Entry | ⚙️ Dynamic Action Choice |
+| :---: | :---: | :---: |
+| <img src="images/5.png" width="280" alt="Select Recovery Method"> | <img src="images/6.png" width="280" alt="PIN & Password GUI"> | <img src="images/7.png" width="280" alt="Action Choice GUI"> |
+
+### 🌀 Classic Pattern Recovery Interface
 | 🎛️ Live Interactive Drawer | 📊 Deep Telemetry & Execution Log |
 | :---: | :---: |
 | <img src="https://raw.githubusercontent.com/alisakkaf/Smart-Screen-Unlocker-Recovery/main/images/Unlock_Screen1.png" width="450" alt="Unlock Screen Custom Matrix"> | <img src="https://raw.githubusercontent.com/alisakkaf/Smart-Screen-Unlocker-Recovery/main/images/Unlock_Screen2.png" width="450" alt="Engine Execution and Verification"> |
 | <img src="https://raw.githubusercontent.com/alisakkaf/Smart-Screen-Unlocker-Recovery/main/images/Unlock_Screen3.png.png" width="450" alt="Live Hardware Touch Inference"> | <img src="https://raw.githubusercontent.com/alisakkaf/Smart-Screen-Unlocker-Recovery/main/images/ADB_Screen_Lock.png" width="450" alt="Device Connection & Handshake"> |
+
+---
+
+## 🛠️ PIN & Password Recovery Mechanism (Under the Hood)
+
+This tool features a highly secure, automated verification and bypass framework for PIN and Password recovery:
+
+* **Secure OS Verification**: Rather than simulating clicks blindly, the script uses the device's secure lock settings API:
+  - Modern command: `adb shell cmd lock_settings verify --old <credential>`
+  - Legacy command: `adb shell locksettings verify --old <credential>`
+  This determines with 100% mathematical certainty if the entered credential is correct.
+* **Precision Injector (`type_password_safe`)**: Pure alphanumeric strings are typed instantly as a single block. Special symbols and spaces are typed character-by-character with automatic `%s` space mapping and shell parameter escaping.
+* **Action Choice Menu**: After successful verification, the technician selects their desired action via a customized Tkinter GUI:
+  - **Unlock Phone (Keep Password)**: Wakes up the screen using non-toggling wakeup keys (`KEYCODE_WAKEUP` / keyevent 224), dismisses the keyguard swipe bouncer, types the correct verified password, and presses Enter.
+  - **Remove Password Completely (Clear Lock)**: Issues `cmd lock_settings clear --old <credential>` to permanently remove the lock screen security database (setting lock to None/Swipe), facilitating quick backups.
+  - **No Action**: Simply outputs the correct verified lock screen code in the terminal logs and exits.
+* **Unicode & Language Safety Filter**: ADB keyboard simulation maps keys based on the active device virtual keyboard layout (e.g. Gboard/Samsung Keyboard). Non-ASCII credentials (e.g. Arabic `علي1` or Chinese `你好`) often fail to type correctly because the active layout maps key inputs differently (e.g., Gboard Arabic translates key injections to Arabic-Indic digits `١` instead of ASCII `1`). 
+  - To prevent input threshold lockouts and ensure absolute safety, the script automatically parses the credential layout. If it contains non-ASCII characters, the **Unlock Phone (Keep Password)** option is hidden entirely from the GUI. The user is allowed only to select **Remove Password Completely (Clear Lock)** (which operates safely at the programmatic system database level) or **No Action**.
 
 ---
 ## ⚙️ The 6-Engine Multi-Attack Strategy
