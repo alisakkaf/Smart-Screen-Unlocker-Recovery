@@ -10,7 +10,10 @@ from tkinter import messagebox, font
 
 if os.name == 'nt':
     os.system('color')
-    os.system('mode con cols=85 lines=45')
+    # Try the requested 745x900 pixel equivalent layout (93x56). Fall back to safer heights if display resolution/scaling limits it.
+    if os.system('mode con cols=93 lines=56') != 0:
+        if os.system('mode con cols=93 lines=48') != 0:
+            os.system('mode con cols=85 lines=45')
 
 # Rich Colorful CLI Theme
 OCEAN_BLUE = "\033[38;5;26m"
@@ -27,7 +30,7 @@ BOLD = '\033[1m'
 
 def print_banner():
     print(f"{CYAN}{BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
-    print(f"{YELLOW}{BOLD}                 Android Smart Pattern Recovery v1.0                  {RESET}")
+    print(f"{YELLOW}{BOLD}                 Android Smart Pattern Recovery v1.1                  {RESET}")
     print(f"{CYAN}{BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}\n")
 
 def print_footer():
@@ -40,7 +43,10 @@ def print_footer():
 
 def run_adb(command):
     try:
-        result = subprocess.run(command, shell=True, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+        if isinstance(command, list):
+            result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+        else:
+            result = subprocess.run(command, shell=True, capture_output=True, text=True, encoding='utf-8', errors='ignore')
         return result.stdout.strip()
     except Exception:
         return ""
@@ -360,12 +366,21 @@ def execute_injection(points, sequence):
 
 def verify_unlocked_state():
     time.sleep(2.5)
-    print(f"{CYAN}[+] Verifying lock screen status...{RESET}")
     
+    power_dump = run_adb("adb shell dumpsys power")
+    if "mHoldingDisplaySuspendBlocker=false" in power_dump or "Display Power: state=OFF" in power_dump:
+        return False
+
     window_dump = run_adb("adb shell dumpsys window")
     keyguard_dump = run_adb("adb shell dumpsys keyguard")
     
-    if "mShowingLockscreen=true" in window_dump or "showing=true" in keyguard_dump:
+    keyguard_indicators = [
+        "mShowingLockscreen=true", 
+        "showing=true", 
+        "mKeyguardShowing=true",
+        "mScreenOnFully=false"
+    ]
+    if any(indicator in window_dump or indicator in keyguard_dump for indicator in keyguard_indicators):
         return False
         
     current_focus = ""
@@ -374,73 +389,473 @@ def verify_unlocked_state():
             current_focus = line.strip().lower()
             break
             
-    locked_keywords = ["keyguard", "lock", "bouncer", "notificationshade", "screenoff", "aod"]
-    for kw in locked_keywords:
-        if kw in current_focus:
+    if "mcurrentfocus=null" in current_focus:
+        if "iskeyguardlocked=true" in keyguard_dump or "mshowing=true" in keyguard_dump.lower():
             return False
             
+    locked_keywords = ["keyguard", "lock", "bouncer", "notificationshade", "screenoff", "aod", "comboview"]
+    for kw in locked_keywords:
+        if kw in current_focus: 
+            return False
+
     return True
 
-def inject_pattern():
-    os.system('cls' if os.name == 'nt' else 'clear')
-    print_banner()
-    
-    devices = run_adb("adb devices").split('\n')
-    if len([d for d in devices if d.strip()]) < 2 or 'device' not in devices[1]:
-        print(f"{RED}[-] Device not detected or unauthorized. Please check USB debugging.{RESET}")
-        return
+def print_troubleshooting():
+    print(f"\n{ORANGE}{BOLD}╭───────────────── Troubleshooting & Scientific Solutions ─────────────────╮{RESET}")
+    print(f"{ORANGE}│ 1. All Engines Failed: Device DPI scaling is completely non-standard.  │{RESET}")
+    print(f"{ORANGE}│ 2. Touch Latency: The device might be processing touches too slowly.   │{RESET}")
+    print(f"{ORANGE}│    Solution: Increase 'UserWait(20)' to 'UserWait(40)' in the code.    │{RESET}")
+    print(f"{ORANGE}│ 3. Incorrect Pattern: Double-check the drawn pattern sequence.         │{RESET}")
+    print(f"{ORANGE}╰────────────────────────────────────────────────────────────────────────╯{RESET}")
 
-    sequence = prompt_user_pattern_interactive()
-    if not sequence:
-        print(f"{YELLOW}[!] Operation cancelled by user.{RESET}")
-        return
+def prompt_user_recovery_type():
+    root = tk.Tk()
+    root.title("Android Smart Recovery")
+    root.geometry("400x320")
+    root.configure(bg="#1e1e1e")
+    root.eval('tk::PlaceWindow . center')
+    root.attributes('-topmost', True)
 
-    print(f"{CYAN}[+] Temporarily adjusting screen timeout to 300000ms (5 minutes)...{RESET}")
-    run_adb("adb shell settings put system screen_off_timeout 300000")
+    choice = [None]
 
-    info = get_device_info()
-    bfu_state = is_before_first_unlock()
-    
-    print(f"\n{OCEAN_BLUE}[+] ━━━━━━━━━ Deep Device Telemetry ━━━━━━━━━{RESET}")
-    print(f"    {YELLOW}Brand:{RESET}        {WHITE}{info['brand'].upper()} ({info['manufacturer']}){RESET}")
-    print(f"    {YELLOW}Model:{RESET}        {WHITE}{info['model']}{RESET}")
-    print(f"    {YELLOW}Board/SOC:{RESET}    {WHITE}{info['board']}{RESET}")
-    print(f"    {YELLOW}Android:{RESET}      {WHITE}{info['android']} (API: {info['api_level']}){RESET}")
-    print(f"    {YELLOW}Security:{RESET}     {WHITE}{info['security']}{RESET}")
-    if info['oneui']: print(f"    {YELLOW}One UI:{RESET}       {LIGHT_BLUE}OneUI {info['oneui']}{RESET}")
-    print(f"    {YELLOW}Resolution:{RESET}   {WHITE}{info['width']}x{info['height']} @ {info['dpi']} DPI{RESET}")
-    print(f"    {YELLOW}USB Mode:{RESET}     {WHITE}{info['usb']}{RESET}")
-    print(f"    {YELLOW}Crypto:{RESET}       {WHITE}{info['crypto_state']}{RESET}")
-    print(f"    {YELLOW}FBE State:{RESET}    {WHITE}{'BFU (Just Rebooted)' if bfu_state else 'AFU (Normal Lock)'}{RESET}")
-    print(f"{OCEAN_BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}\n")
+    title_font = font.Font(family="Helvetica", size=16, weight="bold")
+    btn_font = font.Font(family="Helvetica", size=12, weight="bold")
 
-    ensure_screen_ready(info['width'], info['height'])
-    strategies = build_attack_strategies(info, bfu_state)
-    
-    success = False
-    for attempt, (engine_name, points) in enumerate(strategies, 1):
-        print(f"\n{MAGENTA}[+] Executing Attempt {attempt}/{len(strategies)} using {engine_name}...{RESET}")
-        start_pt = points['A']
-        print(f"{WHITE}    [*] Grid Start Point (A): X={start_pt[0]}, Y={start_pt[1]}{RESET}")
-        
-        if attempt > 1:
-            ensure_screen_ready(info['width'], info['height'], is_retry=True)
-            
-        print(f"{CYAN}[+] Generating Smart Action script for sequence: {''.join(sequence)}...{RESET}")
-        execute_injection(points, sequence)
-        print(f"{CYAN}[+] Executing fluid pattern operation via kernel...{RESET}")
-        
-        if verify_unlocked_state():
-            print(f"\n{GREEN}{BOLD}[+] Task Completed Successfully! The device is UNLOCKED!{RESET}")
-            success = True
-            break
+    tk.Label(root, text="Select Recovery Method", bg="#1e1e1e", fg="#00ffff", font=title_font).pack(pady=(20, 15))
+
+    def select_pattern():
+        choice[0] = "pattern"
+        root.destroy()
+
+    def select_pin():
+        choice[0] = "pin"
+        root.destroy()
+
+    def select_password():
+        choice[0] = "password"
+        root.destroy()
+
+    btn_pattern = tk.Button(root, text="Pattern Recovery", bg="#008cba", fg="white", font=btn_font, width=20, height=2, relief="flat", activebackground="#007ba0", activeforeground="white", command=select_pattern)
+    btn_pattern.pack(pady=8)
+    btn_pattern.bind("<Enter>", lambda e: btn_pattern.config(bg="#00a0d2"))
+    btn_pattern.bind("<Leave>", lambda e: btn_pattern.config(bg="#008cba"))
+
+    btn_pin = tk.Button(root, text="PIN Recovery", bg="#e0a800", fg="black", font=btn_font, width=20, height=2, relief="flat", activebackground="#c69500", activeforeground="black", command=select_pin)
+    btn_pin.pack(pady=8)
+    btn_pin.bind("<Enter>", lambda e: btn_pin.config(bg="#f3b807"))
+    btn_pin.bind("<Leave>", lambda e: btn_pin.config(bg="#e0a800"))
+
+    btn_password = tk.Button(root, text="Password Recovery", bg="#28a745", fg="white", font=btn_font, width=20, height=2, relief="flat", activebackground="#218838", activeforeground="white", command=select_password)
+    btn_password.pack(pady=8)
+    btn_password.bind("<Enter>", lambda e: btn_password.config(bg="#34ce57"))
+    btn_password.bind("<Leave>", lambda e: btn_password.config(bg="#28a745"))
+
+    root.protocol("WM_DELETE_WINDOW", lambda: root.destroy())
+    root.mainloop()
+    return choice[0]
+
+def prompt_user_pin_interactive():
+    root = tk.Tk()
+    root.title("Android PIN Recovery")
+    root.geometry("400x250")
+    root.configure(bg="#1e1e1e")
+    root.eval('tk::PlaceWindow . center')
+    root.attributes('-topmost', True)
+
+    user_pin = [None]
+
+    title_font = font.Font(family="Helvetica", size=16, weight="bold")
+    lbl_font = font.Font(family="Helvetica", size=11)
+    btn_font = font.Font(family="Helvetica", size=11, weight="bold")
+
+    tk.Label(root, text="Enter Device PIN", bg="#1e1e1e", fg="#00ffff", font=title_font).pack(pady=(25, 10))
+    tk.Label(root, text="Enter the numeric PIN to test/verify:", bg="#1e1e1e", fg="#aaaaaa", font=lbl_font).pack(pady=(0, 15))
+
+    entry_pin = tk.Entry(root, bg="#2a2a2a", fg="white", insertbackground="white", font=("Helvetica", 14), width=18, justify="center", show="")
+    entry_pin.pack(pady=(0, 20))
+    entry_pin.focus()
+
+    # Show/Hide PIN toggle (Default to Show/True)
+    show_pin = tk.BooleanVar(value=True)
+    def toggle_pin_visibility():
+        if show_pin.get():
+            entry_pin.config(show="*")
+            btn_toggle.config(text="Show PIN")
+            show_pin.set(False)
         else:
-            print(f"{YELLOW}[-] Verification Failed: The device is still locked. Moving to next engine...{RESET}")
+            entry_pin.config(show="")
+            btn_toggle.config(text="Hide PIN")
+            show_pin.set(True)
 
-    if not success:
-        print(f"\n{RED}{BOLD}[-] All Engines Failed: The device appears to be STILL LOCKED.{RESET}")
+    btn_toggle = tk.Button(root, text="Hide PIN", bg="#444444", fg="white", font=("Helvetica", 9), relief="flat", command=toggle_pin_visibility)
+    btn_toggle.place(x=305, y=105, width=65, height=26)
 
-    print_footer()
+    def on_submit():
+        pin_val = entry_pin.get().strip()
+        if not pin_val:
+            messagebox.showerror("Error", "PIN cannot be empty.", parent=root)
+            return
+        if not pin_val.isdigit():
+            messagebox.showerror("Error", "PIN must contain digits only.", parent=root)
+            return
+        user_pin[0] = pin_val
+        root.destroy()
+
+    def on_cancel():
+        root.destroy()
+
+    btn_frame = tk.Frame(root, bg="#1e1e1e")
+    btn_frame.pack(pady=10)
+
+    btn_submit = tk.Button(btn_frame, text="Start Recovery", bg="#008cba", fg="white", font=btn_font, width=15, relief="flat", command=on_submit)
+    btn_submit.grid(row=0, column=0, padx=10)
+    btn_submit.bind("<Enter>", lambda e: btn_submit.config(bg="#00a0d2"))
+    btn_submit.bind("<Leave>", lambda e: btn_submit.config(bg="#008cba"))
+
+    btn_cancel = tk.Button(btn_frame, text="Cancel", bg="#f44336", fg="white", font=btn_font, width=10, relief="flat", command=on_cancel)
+    btn_cancel.grid(row=0, column=1, padx=10)
+    btn_cancel.bind("<Enter>", lambda e: btn_cancel.config(bg="#ff5c4d"))
+    btn_cancel.bind("<Leave>", lambda e: btn_cancel.config(bg="#f44336"))
+
+    root.bind("<Return>", lambda event: on_submit())
+    root.mainloop()
+    return user_pin[0]
+
+def prompt_user_password_interactive():
+    root = tk.Tk()
+    root.title("Android Password Recovery")
+    root.geometry("400x250")
+    root.configure(bg="#1e1e1e")
+    root.eval('tk::PlaceWindow . center')
+    root.attributes('-topmost', True)
+
+    user_password = [None]
+
+    title_font = font.Font(family="Helvetica", size=16, weight="bold")
+    lbl_font = font.Font(family="Helvetica", size=11)
+    btn_font = font.Font(family="Helvetica", size=11, weight="bold")
+
+    tk.Label(root, text="Enter Device Password", bg="#1e1e1e", fg="#00ffff", font=title_font).pack(pady=(25, 10))
+    tk.Label(root, text="Enter the password to test/verify:", bg="#1e1e1e", fg="#aaaaaa", font=lbl_font).pack(pady=(0, 15))
+
+    entry_pw = tk.Entry(root, bg="#2a2a2a", fg="white", insertbackground="white", font=("Helvetica", 14), width=18, justify="center", show="")
+    entry_pw.pack(pady=(0, 20))
+    entry_pw.focus()
+
+    # Show/Hide Password toggle (Default to Show/True)
+    show_pw = tk.BooleanVar(value=True)
+    def toggle_pw_visibility():
+        if show_pw.get():
+            entry_pw.config(show="*")
+            btn_toggle.config(text="Show Password")
+            show_pw.set(False)
+        else:
+            entry_pw.config(show="")
+            btn_toggle.config(text="Hide Password")
+            show_pw.set(True)
+
+    btn_toggle = tk.Button(root, text="Hide Password", bg="#444444", fg="white", font=("Helvetica", 9), relief="flat", command=toggle_pw_visibility)
+    btn_toggle.place(x=298, y=105, width=92, height=26)
+
+    def on_submit():
+        pw_val = entry_pw.get().strip()
+        if not pw_val:
+            messagebox.showerror("Error", "Password cannot be empty.", parent=root)
+            return
+        user_password[0] = pw_val
+        root.destroy()
+
+    def on_cancel():
+        root.destroy()
+
+    btn_frame = tk.Frame(root, bg="#1e1e1e")
+    btn_frame.pack(pady=10)
+
+    btn_submit = tk.Button(btn_frame, text="Start Recovery", bg="#008cba", fg="white", font=btn_font, width=15, relief="flat", command=on_submit)
+    btn_submit.grid(row=0, column=0, padx=10)
+    btn_submit.bind("<Enter>", lambda e: btn_submit.config(bg="#00a0d2"))
+    btn_submit.bind("<Leave>", lambda e: btn_submit.config(bg="#008cba"))
+
+    btn_cancel = tk.Button(btn_frame, text="Cancel", bg="#f44336", fg="white", font=btn_font, width=10, relief="flat", command=on_cancel)
+    btn_cancel.grid(row=0, column=1, padx=10)
+    btn_cancel.bind("<Enter>", lambda e: btn_cancel.config(bg="#ff5c4d"))
+    btn_cancel.bind("<Leave>", lambda e: btn_cancel.config(bg="#f44336"))
+
+    root.bind("<Return>", lambda event: on_submit())
+    root.mainloop()
+    return user_password[0]
+
+def map_unicode_password_to_qwerty(password):
+    arabic_map = {
+        'ض': 'q', 'ص': 'w', 'ث': 'e', 'ق': 'r', 'ف': 't', 'غ': 'y', 'ع': 'u', 'ه': 'i', 'خ': 'o', 'ح': 'p', 'ج': '[', 'د': ']',
+        'ش': 'a', 'س': 's', 'ي': 'd', 'ب': 'f', 'ل': 'g', 'ا': 'h', 'ت': 'j', 'ن': 'k', 'م': 'l', 'ك': ';', 'ط': "'",
+        'ئ': 'z', 'ء': 'x', 'ؤ': 'c', 'ر': 'v', 'لا': 'b', 'ى': 'n', 'ة': 'm', 'و': ',', 'ز': '.', 'ظ': '/',
+        'ذ': '`',
+        'أ': 'H', 'إ': 'Y', 'آ': 'N', 'لأ': 'B', 'لإ': 'T', 'لآ': 'G',
+        '؟': '?', '،': ',', '؛': ';',
+        # Arabic-Indic digits to ASCII digits
+        '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'
+    }
+    
+    mapped_chars = []
+    i = 0
+    while i < len(password):
+        # Look ahead for two-character combinations like لأ, لإ, لآ
+        if i + 1 < len(password) and password[i:i+2] in arabic_map:
+            mapped_chars.append(arabic_map[password[i:i+2]])
+            i += 2
+        elif password[i] in arabic_map:
+            mapped_chars.append(arabic_map[password[i]])
+            i += 1
+        else:
+            mapped_chars.append(password[i])
+            i += 1
+            
+    return "".join(mapped_chars)
+
+def type_password_safe(pin):
+    # Check if pin is purely alphanumeric (no spaces, no symbols)
+    if pin.isalnum():
+        # Type the entire string at once (very fast and safe)
+        run_adb(["adb", "shell", "input", "text", pin])
+    else:
+        # Type character by character to handle spaces and symbols safely
+        for char in pin:
+            if char.isalnum():
+                run_adb(["adb", "shell", "input", "text", char])
+            elif char == " ":
+                run_adb(["adb", "shell", "input", "text", "%s"])
+            else:
+                # Wrap symbols in double quotes to prevent Android shell syntax evaluation
+                run_adb(["adb", "shell", "input", "text", f'"{char}"'])
+            time.sleep(0.15)
+
+def prompt_user_pin_action(is_unicode=False):
+    root = tk.Tk()
+    root.title("Action Choice")
+    root.geometry("560x240" if is_unicode else "560x290")
+    root.configure(bg="#1e1e1e")
+    root.eval('tk::PlaceWindow . center')
+    root.attributes('-topmost', True)
+
+    choice = [None]
+
+    title_font = font.Font(family="Helvetica", size=15, weight="bold")
+    desc_font = font.Font(family="Helvetica", size=10)
+    btn_font = font.Font(family="Helvetica", size=11, weight="bold")
+    warn_font = font.Font(family="Helvetica", size=9, weight="bold")
+
+    tk.Label(root, text="Verified Successfully!", bg="#1e1e1e", fg="#00ff00", font=title_font).pack(pady=(20, 5))
+    tk.Label(root, text="Select the action you want to perform on the device:", bg="#1e1e1e", fg="#aaaaaa", font=desc_font).pack(pady=(0, 15))
+
+    if is_unicode:
+        tk.Label(root, text="⚠️ 'Unlock Phone' (typing) is not supported for Unicode (Arabic/Chinese) passwords.\nPlease use 'Remove Password Completely' to unlock.", bg="#1e1e1e", fg="#ffcc00", font=warn_font).pack(pady=(0, 10))
+
+    def select_unlock():
+        choice[0] = "unlock"
+        root.destroy()
+
+    def select_clear():
+        choice[0] = "clear"
+        root.destroy()
+
+    def select_none():
+        choice[0] = "none"
+        root.destroy()
+
+    if not is_unicode:
+        btn_unlock = tk.Button(root, text="Unlock Phone (Keep Password)", bg="#008cba", fg="white", font=btn_font, width=48, height=1, relief="flat", command=select_unlock)
+        btn_unlock.pack(pady=6)
+        btn_unlock.bind("<Enter>", lambda e: btn_unlock.config(bg="#00a0d2"))
+        btn_unlock.bind("<Leave>", lambda e: btn_unlock.config(bg="#008cba"))
+
+    btn_clear = tk.Button(root, text="Remove Password Completely (Clear Lock)", bg="#28a745", fg="white", font=btn_font, width=48, height=1, relief="flat", command=select_clear)
+    btn_clear.pack(pady=6)
+    btn_clear.bind("<Enter>", lambda e: btn_clear.config(bg="#218838"))
+    btn_clear.bind("<Leave>", lambda e: btn_clear.config(bg="#28a745"))
+
+    btn_none = tk.Button(root, text="No Action (Just report success)", bg="#555555", fg="white", font=btn_font, width=48, height=1, relief="flat", command=select_none)
+    btn_none.pack(pady=6)
+    btn_none.bind("<Enter>", lambda e: btn_none.config(bg="#6c757d"))
+    btn_none.bind("<Leave>", lambda e: btn_none.config(bg="#555555"))
+
+    root.protocol("WM_DELETE_WINDOW", lambda: root.destroy())
+    root.mainloop()
+    return choice[0]
+
+def unlock_device_with_pin(pin, width, height):
+    print(f"\n{CYAN}[+] Waking up device and preparing typing...{RESET}")
+    # Wake screen safely using WAKEUP keyevent (does not toggle screen off if already awake)
+    run_adb("adb shell input keyevent 224")
+    time.sleep(0.5)
+    # Dismiss keyguard / swipe up
+    mid_x = width // 2
+    run_adb(f"adb shell input swipe {mid_x} {int(height*0.9)} {mid_x} {int(height*0.1)} 250")
+    time.sleep(2.5) # Wait 2.5 seconds to ensure lockscreen entry screen is fully ready
+    
+    # Type password safely (handles alphanumeric, spaces, and symbols correctly)
+    type_password_safe(pin)
+    time.sleep(0.5)
+    # Press Enter
+    run_adb("adb shell input keyevent 66")
+    time.sleep(1.5)
+    print(f"{GREEN}[+] Unlock keyevents sent to device.{RESET}")
+
+def clear_lock_credential(pin):
+    print(f"\n{CYAN}[+] Attempting to clear lock credential (removing password/PIN)...{RESET}")
+    cmd = ["adb", "shell", "cmd", "lock_settings", "clear", "--old", pin]
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+    stdout = result.stdout.strip()
+    stderr = result.stderr.strip()
+    combined_output = (stdout + "\n" + stderr).strip()
+    
+    if "not found" in combined_output.lower() or "cmd: failure" in combined_output.lower():
+        cmd = ["adb", "shell", "locksettings", "clear", "--old", pin]
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+        combined_output = (stdout + "\n" + stderr).strip()
+
+    success = (result.returncode == 0) or ("successfully" in combined_output.lower()) or (not combined_output)
+    if success:
+        print(f"{GREEN}{BOLD}[+] SUCCESS: Lock credential cleared successfully! The phone is now unsecured (No PIN/Password).{RESET}")
+        return True
+    else:
+        print(f"{RED}{BOLD}[-] FAILURE: Could not clear lock credential.{RESET}")
+        print(f"{YELLOW}[*] Device response:{RESET}\n{combined_output}")
+        return False
+
+def verify_pin_via_locksettings(pin):
+    print(f"\n{CYAN}[+] Running verification...{RESET}")
+    
+    cmd = ["adb", "shell", "cmd", "lock_settings", "verify", "--old", pin]
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+    stdout = result.stdout.strip()
+    stderr = result.stderr.strip()
+    combined_output = (stdout + "\n" + stderr).strip()
+    
+    # Check if 'cmd' command was not found or failed due to cmd package issues
+    if "not found" in combined_output.lower() or "cmd: failure" in combined_output.lower():
+        # Fallback to legacy locksettings command
+        cmd = ["adb", "shell", "locksettings", "verify", "--old", pin]
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+        combined_output = (stdout + "\n" + stderr).strip()
+
+    success = (result.returncode == 0) or ("verified successfully" in combined_output.lower())
+    return success, combined_output
+
+def inject_pattern():
+    while True:
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print_banner()
+        
+        devices = run_adb("adb devices").split('\n')
+        if len([d for d in devices if d.strip()]) < 2 or 'device' not in devices[1]:
+            print(f"{RED}[-] Device not detected or unauthorized. Please check USB debugging.{RESET}")
+            choice = input(f"\n{YELLOW}Press Enter to retry, or type 'exit' to quit: {RESET}").strip().lower()
+            if choice == 'exit':
+                break
+            continue
+
+        recovery_type = prompt_user_recovery_type()
+        if not recovery_type:
+            print(f"{YELLOW}[!] Operation cancelled by user. Exiting...{RESET}")
+            break
+
+        if recovery_type == "pattern":
+            sequence = prompt_user_pattern_interactive()
+            if not sequence:
+                print(f"{YELLOW}[!] Pattern drawing cancelled by user.{RESET}")
+                input(f"\n{YELLOW}Press Enter to return to the main menu...{RESET}")
+                continue
+        elif recovery_type == "pin":
+            pin = prompt_user_pin_interactive()
+            if not pin:
+                print(f"{YELLOW}[!] PIN entry cancelled by user.{RESET}")
+                input(f"\n{YELLOW}Press Enter to return to the main menu...{RESET}")
+                continue
+        else:
+            pin = prompt_user_password_interactive()
+            if not pin:
+                print(f"{YELLOW}[!] Password entry cancelled by user.{RESET}")
+                input(f"\n{YELLOW}Press Enter to return to the main menu...{RESET}")
+                continue
+
+        # Screen Timeout Backup and Modify
+        original_timeout = run_adb("adb shell settings get system screen_off_timeout")
+        if original_timeout and original_timeout.isdigit():
+            print(f"{CYAN}[+] Temporarily adjusting screen timeout to 60000ms (1 minute)...{RESET}")
+            run_adb("adb shell settings put system screen_off_timeout 60000")
+
+        info = get_device_info()
+        bfu_state = is_before_first_unlock()
+        
+        print(f"{OCEAN_BLUE}[+] ━━━━━━━━━ Deep Device Telemetry ━━━━━━━━━{RESET}")
+        print(f"    {YELLOW}Brand:{RESET}        {WHITE}{info['brand'].upper()} ({info['manufacturer']}){RESET}")
+        print(f"    {YELLOW}Model:{RESET}        {WHITE}{info['model']}{RESET}")
+        print(f"    {YELLOW}Board/SOC:{RESET}    {WHITE}{info['board']}{RESET}")
+        print(f"    {YELLOW}Android:{RESET}      {WHITE}{info['android']} (API: {info['api_level']}){RESET}")
+        print(f"    {YELLOW}Security:{RESET}     {WHITE}{info['security']}{RESET}")
+        if info['oneui']: print(f"    {YELLOW}One UI:{RESET}       {LIGHT_BLUE}OneUI {info['oneui']}{RESET}")
+        print(f"    {YELLOW}Resolution:{RESET}   {WHITE}{info['width']}x{info['height']} @ {info['dpi']} DPI{RESET}")
+        print(f"    {YELLOW}USB Mode:{RESET}     {WHITE}{info['usb']}{RESET}")
+        print(f"    {YELLOW}Crypto:{RESET}       {WHITE}{info['crypto_state']}{RESET}")
+        print(f"    {YELLOW}FBE State:{RESET}    {WHITE}{'BFU (Just Rebooted)' if bfu_state else 'AFU (Normal Lock)'}{RESET}")
+        print(f"{OCEAN_BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}\n")
+
+        if recovery_type == "pattern":
+            ensure_screen_ready(info['width'], info['height'])
+            strategies = build_attack_strategies(info, bfu_state)
+            
+            success = False
+            for attempt, (engine_name, points) in enumerate(strategies, 1):
+                print(f"\n{MAGENTA}[+] Executing Attempt {attempt}/{len(strategies)} using {engine_name}...{RESET}")
+                
+                if attempt > 1:
+                    ensure_screen_ready(info['width'], info['height'], is_retry=True)
+                    
+                execute_injection(points, sequence)
+                print(f"{CYAN}[+] Payload injected. Verifying lock screen status...{RESET}")
+                
+                if verify_unlocked_state():
+                    print(f"\n{GREEN}{BOLD}[+] Verification Success: The device is UNLOCKED!{RESET}")
+                    success = True
+                    break
+                else:
+                    print(f"{YELLOW}[-] Verification Failed: The device is still locked. Moving to next engine...{RESET}")
+
+            if not success:
+                print_troubleshooting()
+        else:
+            # PIN / Password recovery flow via locksettings
+            success, response = verify_pin_via_locksettings(pin)
+            if success:
+                print(f"\n{GREEN}{BOLD}[+] SUCCESS: Lock credential verified successfully!{RESET}")
+                print(f"{GREEN}{BOLD}[+] Correct credential identified: {pin}{RESET}")
+                
+                is_unicode = not pin.isascii()
+                
+                # Prompt user for subsequent actions
+                action = prompt_user_pin_action(is_unicode=is_unicode)
+                if action == "unlock":
+                    unlock_device_with_pin(pin, info['width'], info['height'])
+                elif action == "clear":
+                    clear_lock_credential(pin)
+                else:
+                    print(f"{YELLOW}[*] No post-verification action was executed.{RESET}")
+            else:
+                print(f"\n{RED}{BOLD}[-] FAILURE: Lock credential verification failed.{RESET}")
+                print(f"{YELLOW}[*] Command Response:{RESET}\n{response}")
+
+        # Restore Original Screen Timeout
+        if original_timeout and original_timeout.isdigit():
+            run_adb(f"adb shell settings put system screen_off_timeout {original_timeout}")
+            print(f"\n{CYAN}[+] Restored original screen timeout to {original_timeout}ms{RESET}")
+
+        print_footer()
+        input(f"\n{YELLOW}Press Enter to return to the main menu...{RESET}")
 
 if __name__ == "__main__":
     inject_pattern()
