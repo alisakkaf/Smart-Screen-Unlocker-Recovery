@@ -1,4 +1,4 @@
-# Project: Smart Screen Unlocker Recovery v1.0 
+# Project: Smart Screen Unlocker Recovery v1.1 
 # Note: The main.py script utilizes pure Python standard libraries (tkinter, os, subprocess, math, xml). 
 # The dependencies below are strictly required for compiling the script into a standalone .exe file. 
 
