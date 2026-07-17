@@ -146,7 +146,6 @@ To bundle the utility into a portable runtime executable with your custom icon (
 
 ```powershell
 python -c "from PIL import Image; img = Image.open('6437133.png'); img.save('icon.ico', format='ICO')" ; pyinstaller --noconfirm --onefile --console --icon="icon.ico" --name="Smart_Screen_Unlocker" --clean main.py 
-
 ```
 
 ---
